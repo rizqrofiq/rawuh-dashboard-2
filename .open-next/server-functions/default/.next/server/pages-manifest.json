@@ -1,0 +1,19 @@
+{
+  "/": "pages/index.html",
+  "/_app": "pages/_app.js",
+  "/_document": "pages/_document.js",
+  "/_error": "pages/_error.js",
+  "/api/hello": "pages/api/hello.js",
+  "/attendance": "pages/attendance.html",
+  "/auth/login": "pages/auth/login.html",
+  "/classes": "pages/classes.html",
+  "/classes/[id]": "pages/classes/[id].html",
+  "/face-recognition": "pages/face-recognition.html",
+  "/lecturers": "pages/lecturers.html",
+  "/schedule": "pages/schedule.html",
+  "/sessions": "pages/sessions.html",
+  "/settings": "pages/settings.html",
+  "/statistics": "pages/statistics.html",
+  "/students": "pages/students.html",
+  "/404": "pages/404.html"
+}
