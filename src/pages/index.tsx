@@ -1,78 +1,223 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+import { useEffect, useState } from "react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import StatCard from "@/components/dashboard/StatCard";
+import ClassesTable from "@/components/dashboard/ClassesTable";
+import AttendanceChart from "@/components/dashboard/AttendanceChart";
+import ActiveSessionsWidget from "@/components/dashboard/ActiveSessionsWidget";
+import {
+  apiClient,
+  LecturerStats,
+  UserProfile,
+  Class,
+  Session,
+} from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+export default function Dashboard() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState<LecturerStats | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [avgAttendance, setAvgAttendance] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true);
+        const [statsRes, profileRes, classesRes, activeSessionsRes] =
+          await Promise.all([
+            apiClient.getMyStats().catch(() => ({ data: null })),
+            apiClient.getProfile(),
+            apiClient.getMyClasses(),
+            apiClient.getActiveSessions().catch(() => ({ data: [] })),
+          ]);
 
-export default function Home() {
+        console.log("Stats response:", statsRes);
+        console.log("Classes response:", classesRes);
+        console.log("Active sessions response:", activeSessionsRes);
+
+        const classes = classesRes.data || [];
+        const activeSessions = activeSessionsRes.data || [];
+
+        // If API stats are 0 or missing, calculate from classes data
+        const apiStats = statsRes.data as LecturerStats;
+        const calculatedStats: LecturerStats = {
+          total_classes: apiStats?.total_classes || classes.length,
+          active_sessions: apiStats?.active_sessions || activeSessions.length,
+          total_students: apiStats?.total_students || 0,
+        };
+
+        // If total_students is 0, we can calculate from session history
+        setStats(calculatedStats);
+        setProfile(profileRes.data);
+
+        // Calculate average attendance from session history
+        if (classes.length > 0) {
+          const historyPromises = classes.map((cls: Class) =>
+            apiClient.getSessionHistory(cls.id).catch(() => ({ data: [] }))
+          );
+          const historyResults = await Promise.all(historyPromises);
+
+          let totalPresent = 0;
+          let totalStudents = 0;
+          let uniqueStudents = 0;
+
+          historyResults.forEach((res) => {
+            const sessions = res.data || [];
+            sessions.forEach((s: Session) => {
+              if (s.total_students && s.total_students > 0) {
+                totalPresent += s.present_count || 0;
+                totalStudents += s.total_students;
+                // Track max students per class for unique count
+                if (s.total_students > uniqueStudents) {
+                  uniqueStudents = s.total_students;
+                }
+              }
+            });
+          });
+
+          if (totalStudents > 0) {
+            setAvgAttendance(
+              Math.round((totalPresent / totalStudents) * 100 * 10) / 10
+            );
+          }
+
+          // Update total_students if it was 0
+          if (calculatedStats.total_students === 0 && uniqueStudents > 0) {
+            setStats((prev) =>
+              prev ? { ...prev, total_students: uniqueStudents } : prev
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+        setError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  const displayName =
+    profile?.lecturer_info?.name ||
+    profile?.student_info?.name ||
+    user?.email ||
+    "User";
+  const greeting = `Welcome back, ${displayName.split(" ")[0]}`;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Dashboard" subtitle="Loading...">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center gap-3 text-[var(--rawuh-text-muted)]">
+            <span className="material-symbols-outlined animate-spin">
+              progress_activity
+            </span>
+            <span>Loading dashboard...</span>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout title="Dashboard" subtitle="Error">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-4xl text-[var(--rawuh-error)] mb-2">
+              error
+            </span>
+            <p className="text-[var(--rawuh-error)]">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-[var(--rawuh-primary)] text-white rounded-lg text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black`}
-    >
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <DashboardLayout title="Dashboard" subtitle={greeting}>
+      {/* Stats Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+        <StatCard
+          icon={
+            <span
+              className="material-symbols-outlined text-2xl text-[var(--rawuh-primary)]"
+              style={{ fontVariationSettings: "'FILL' 0, 'wght' 400" }}
+            >
+              school
+            </span>
+          }
+          iconBgColor="var(--rawuh-primary-muted)"
+          title="Total Classes"
+          value={stats?.total_classes ?? "-"}
+          subtitle="This semester"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the index.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+        <StatCard
+          icon={
+            <span
+              className="material-symbols-outlined text-2xl text-[var(--rawuh-success)]"
+              style={{ fontVariationSettings: "'FILL' 0, 'wght' 400" }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              play_circle
+            </span>
+          }
+          iconBgColor="var(--rawuh-success-muted)"
+          title="Active Sessions"
+          value={stats?.active_sessions ?? "-"}
+          subtitle="Currently running"
+        />
+        <StatCard
+          icon={
+            <span
+              className="material-symbols-outlined text-2xl text-[var(--rawuh-secondary-brand)]"
+              style={{ fontVariationSettings: "'FILL' 0, 'wght' 400" }}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              groups
+            </span>
+          }
+          iconBgColor="#FFF3E8"
+          title="Total Students"
+          value={stats?.total_students ?? "-"}
+          subtitle="Across all classes"
+        />
+        <StatCard
+          icon={
+            <span
+              className="material-symbols-outlined text-2xl text-[var(--rawuh-main)]"
+              style={{ fontVariationSettings: "'FILL' 0, 'wght' 400" }}
+            >
+              percent
+            </span>
+          }
+          iconBgColor="#EEEEF5"
+          title="Avg. Attendance"
+          value={avgAttendance !== null ? `${avgAttendance}%` : "-"}
+          subtitle="All sessions"
+        />
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Classes Table - Takes 2 columns */}
+        <div className="xl:col-span-2">
+          <ClassesTable />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs/pages/getting-started?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Right Column - Active Sessions & Chart */}
+        <div className="space-y-6">
+          <ActiveSessionsWidget />
+          <AttendanceChart />
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
