@@ -220,21 +220,10 @@ export default function LoginPage() {
                       Lecturer
                     </p>
                     <p className="text-[var(--rawuh-text-muted)]">
-                      NIP: 19120623
+                      NIP: L000001
                     </p>
                     <p className="text-[var(--rawuh-text-muted)]">
                       Pass: lecturer123
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-[var(--rawuh-text)]">
-                      Student
-                    </p>
-                    <p className="text-[var(--rawuh-text-muted)]">
-                      NIM: 2023010001
-                    </p>
-                    <p className="text-[var(--rawuh-text-muted)]">
-                      Pass: password123
                     </p>
                   </div>
                 </div>
